@@ -1,0 +1,36 @@
+# .github/workflows/cicd-security-analysis.yaml
+
+default_options: "--persona=pedantic --format=plain --color=never"
+
+repositories:
+  - name: fluttercandies/flutter_tilt
+    enabled: true
+    options: ""
+
+  - name: fluttercandies/packages
+    enabled: true
+    options: ""
+
+  - name: fluttercandies/.github-workflow
+    enabled: true
+    options: ""
+
+  - name: fluttercandies/.github
+    enabled: false
+    options: ""
+
+  # - name: fluttercandies/flutter_photo_manager
+  #   enabled: true
+  #   options: ""
+
+  # - name: fluttercandies/flutter_wechat_assets_picker
+  #   enabled: true
+  #   options: ""
+  
+  # - name: fluttercandies/extended_image
+  #   enabled: true
+  #   options: ""
+  
+  # - name: fluttercandies/flutter_smart_dialog
+  #   enabled: true
+  #   options: ""

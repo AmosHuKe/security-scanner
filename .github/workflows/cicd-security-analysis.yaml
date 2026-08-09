@@ -1,0 +1,149 @@
+name: CI/CD Security Analysis
+
+on:
+  workflow_call:
+    inputs:
+      scan_config:
+        description: 'Path to the repository list configuration file (relative to repository root).'
+        required: true
+        type: string
+        default: 'cicd-security-analysis-config.yaml'
+      zizmor_config:
+        description: 'Path to zizmor configuration file (relative to repository root).'
+        required: false
+        type: string
+        default: 'cicd-security-analysis-zizmor-config.yaml'
+      target_repo:
+        description: 'Repository to scan (full name, e.g., owner/repo). Leave empty to scan all.'
+        required: false
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+defaults:
+  run:
+    working-directory: "./security-analysis-workflow"
+
+env:
+  ZIZMOR_VERSION: "1.29.0"
+  NODE_VERSION: "24"
+  WORK_DIRECTORY: "./security-analysis-workflow"
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.parse-config.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          repository: ${{ github.action_repository }}
+          path: ${{ env.WORK_DIRECTORY }}
+      
+      - name: Pre-cache zizmor
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 #v6.1.0
+        id: pre-cache-zizmor
+        with:
+          path: ~/.cargo/bin/zizmor
+          key: ${{ runner.os }}-zizmor-v${{ env.ZIZMOR_VERSION }}
+
+      - name: Pre-install zizmor (if cache miss)
+        if: steps.pre-cache-zizmor.outputs.cache-hit != 'true'
+        run: cargo install zizmor --version "$ZIZMOR_VERSION" --locked
+        env:
+          ZIZMOR_VERSION: ${{ env.ZIZMOR_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 #v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: ${{ env.WORK_DIRECTORY }}/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Parse CI/CD security config
+        id: parse-config
+        run: npx tsx scripts/parse-config.ts
+        env:
+          CONFIG_PATH: ${{ github.workspace }}/${{ inputs.scan_config }}
+          TARGET_REPO: ${{ inputs.target_repo || '' }}
+
+  scan:
+    needs: setup
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        repo: ${{ fromJSON(needs.setup.outputs.matrix) }}
+      max-parallel: 10
+      fail-fast: false
+    name: "Scan :: ${{ matrix.repo.name }}"
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          repository: ${{ github.action_repository }}
+          path: ${{ env.WORK_DIRECTORY }}
+
+      - name: "Checkout :: ${{ matrix.repo.name }}"
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
+        with:
+          persist-credentials: false
+          repository: ${{ matrix.repo.name }}
+          path: ./security-analysis-target-repo
+          fetch-depth: 1
+          sparse-checkout: |
+            .github/workflows
+            action.yml
+
+      - name: Restore zizmor cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 #v6.1.0
+        id: restore-zizmor
+        with:
+          path: ~/.cargo/bin/zizmor
+          key: ${{ runner.os }}-zizmor-v${{ env.ZIZMOR_VERSION }}
+      
+      - name: Install zizmor (if cache miss)
+        if: steps.restore-zizmor.outputs.cache-hit != 'true'
+        run: cargo install zizmor --version "$ZIZMOR_VERSION" --locked
+        env:
+          ZIZMOR_VERSION: ${{ env.ZIZMOR_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 #v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: ${{ env.WORK_DIRECTORY }}/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: "Scan :: ${{ matrix.repo.name }}"
+        id: security-analysis
+        run: npx tsx scripts/security-analysis.ts
+        env:
+          # uses: zizmor online mode
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO_OPTIONS: ${{ matrix.repo.options }}
+          ZIZMOR_CONFIG: ${{ github.workspace }}/${{ inputs.zizmor_config }}
+
+      - name: "Issue notification :: ${{ matrix.repo.name }}"
+        run: npx tsx scripts/issue-notification.ts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO_NAME: ${{ matrix.repo.name }}
+          ZIZMOR_EXIT_CODE: ${{ steps.security-analysis.outputs.zizmor_exit_code }}
+          ZIZMOR_OUTPUT_FILE: ${{ steps.security-analysis.outputs.zizmor_output_file }}
