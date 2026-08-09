@@ -19,7 +19,7 @@ on:
         type: string
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: reusable-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions: {}
@@ -29,6 +29,7 @@ defaults:
     working-directory: "./security-analysis-workflow"
 
 env:
+  REPO: "AmosHuKe/security-scanner"
   ZIZMOR_VERSION: "1.29.0"
   NODE_VERSION: "24"
   WORK_DIRECTORY: "./security-analysis-workflow"
@@ -43,7 +44,12 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 1
-          repository: ${{ github.action_repository }}
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          repository: ${{ env.REPO }}
           path: ${{ env.WORK_DIRECTORY }}
       
       - name: Pre-cache zizmor
@@ -94,7 +100,12 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 1
-          repository: ${{ github.action_repository }}
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          repository: ${{ env.REPO }}
           path: ${{ env.WORK_DIRECTORY }}
 
       - name: "Checkout :: ${{ matrix.repo.name }}"
