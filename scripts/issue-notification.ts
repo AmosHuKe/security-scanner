@@ -1,6 +1,7 @@
 import * as core from '@actions/core'
 import * as github from '@actions/github'
 import * as fs from 'fs'
+import { generateMarkdownFromSarifFile } from './generate-audit-report'
 
 /**
  * Notifies about CI/CD security scan results
@@ -10,7 +11,7 @@ import * as fs from 'fs'
  * - GH_TOKEN           (required): GitHub token (permissions: `issues: write`)
  * - REPO_NAME          (required): Full repository name (e.g., "owner/repo")
  * - ZIZMOR_EXIT_CODE   (optional): Exit code from zizmor (0: success, 11-14: findings detected)
- * - ZIZMOR_OUTPUT_FILE (optional): Path to the zizmor output file (default: "zizmor-output.txt")
+ * - ZIZMOR_SARIF_FILE  (optional): SARIF file path (default: "zizmor-sarif-output.json")
  */
 async function run() {
   try {
@@ -19,36 +20,40 @@ async function run() {
       throw new Error('❌ GH_TOKEN is not set')
     }
 
-    const exitCodeStr = process.env.ZIZMOR_EXIT_CODE
-    const exitCode = parseInt(exitCodeStr || '0', 10)
-    const outputFile = process.env.ZIZMOR_OUTPUT_FILE || 'zizmor-output.txt'
+    // const exitCodeStr = process.env.ZIZMOR_EXIT_CODE
+    // const exitCode = parseInt(exitCodeStr || '0', 10)
+    const sarifFile = process.env.ZIZMOR_SARIF_FILE || 'zizmor-sarif-output.json'
 
     const repoName = process.env.REPO_NAME
     if (!repoName) {
       throw new Error('❌ REPO_NAME environment variable is not set')
     }
 
-    let outputBody = ''
-    try {
-      outputBody = fs.readFileSync(outputFile, 'utf8')
-    } catch {
-      outputBody = 'No output captured.'
+    let issueBody: string
+
+    if (sarifFile && fs.existsSync(sarifFile)) {
+      try {
+        const markdown = generateMarkdownFromSarifFile(sarifFile)
+        issueBody = markdown
+        core.info(`✅ Generated Markdown report from SARIF file: ${sarifFile}`)
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error)
+        core.warning(`⚠️ Failed to generate report from SARIF: ${message}`)
+        issueBody = 'No output captured.'
+      }
+    } else {
+      issueBody = 'No output captured.'
     }
+
+    // If body is empty (no issues found)
+    const hasFindings = issueBody && issueBody.trim() !== ''
 
     const octokit = github.getOctokit(token)
     const { owner, repo } = github.context.repo
 
     const issueMarker = `<!-- security-issue-marker: ${repoName} -->`
     const issueTitle = `[CI/CD Security] ${repoName} - Issue Report`
-    const issueBody = `
-## Issues detected in \`${repoName}\`
-
-\`\`\`
-${outputBody}
-\`\`\`
-
-${issueMarker}
-`.trim()
+    const finalIssueBody = `${issueMarker}\n\n${issueBody}`
 
     const allIssues = await octokit.paginate(octokit.rest.issues.listForRepo, {
       owner,
@@ -60,9 +65,8 @@ ${issueMarker}
     const existingOpenIssue = allIssues.find(
       (issue) => !issue.pull_request && issue.body?.includes(issueMarker)
     )
-    const isFailure = exitCode !== 0
 
-    if (isFailure) {
+    if (hasFindings) {
       // Findings detected
       if (existingOpenIssue) {
         await octokit.rest.issues.update({
@@ -70,7 +74,7 @@ ${issueMarker}
           repo,
           issue_number: existingOpenIssue.number,
           title: issueTitle,
-          body: issueBody,
+          body: finalIssueBody,
         })
         core.info(`✅ Updated open issue #${existingOpenIssue.number} with new scan results`)
       } else {
@@ -78,7 +82,7 @@ ${issueMarker}
           owner,
           repo,
           title: issueTitle,
-          body: issueBody,
+          body: finalIssueBody,
         })
         core.info(`✅ Created new issue for ${repoName}`)
       }

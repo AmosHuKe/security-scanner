@@ -157,4 +157,4 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO_NAME: ${{ matrix.repo.name }}
           ZIZMOR_EXIT_CODE: ${{ steps.security-analysis.outputs.zizmor_exit_code }}
-          ZIZMOR_OUTPUT_FILE: ${{ steps.security-analysis.outputs.zizmor_output_file }}
+          ZIZMOR_SARIF_FILE: ${{ steps.security-analysis.outputs.zizmor_sarif_file }}

@@ -7,15 +7,16 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "outDir": "./dist",
-    "rootDir": "./scripts",
     "types": [
       "node",
+      "jest",
       "js-yaml"
     ]
   },
   "include": [
     "scripts/**/*",
-    "types/**/*"
+    "types/**/*",
+    "__test__/**/*"
   ],
   "exclude": [
     "node_modules",

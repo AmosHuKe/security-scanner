@@ -10,26 +10,33 @@
   "author": "AmosHuKe",
   "type": "module",
   "scripts": {
+    "test": "jest",
     "format": "prettier --write **/*.ts",
     "format:check": "prettier --check **/*.ts",
     "lint": "eslint . --fix **/*.ts",
-    "lint:check": "eslint . **/*.ts"
+    "lint:check": "eslint . **/*.ts",
+    "prepare": "husky"
   },
   "dependencies": {
     "@actions/core": "3.0.1",
     "@actions/exec": "3.0.0",
     "@actions/github": "9.1.1",
+    "@microsoft/sarif": "5.6.0",
     "js-yaml": "5.2.3",
     "zod": "4.4.3"
   },
   "devDependencies": {
+    "@types/jest": "30.0.0",
     "@types/js-yaml": "4.0.9",
     "@types/node": "26.1.2",
     "@types/prettier": "2.7.3",
     "@typescript-eslint/eslint-plugin": "8.66.0",
     "eslint": "10.8.0",
     "eslint-config-prettier": "10.1.8",
+    "husky": "9.1.7",
+    "jest": "30.4.2",
     "prettier": "3.9.6",
+    "ts-jest": "29.4.12",
     "tsx": "4.23.10",
     "typescript": "6.0.3",
     "typescript-eslint": "8.66.0"

@@ -8,15 +8,15 @@ import path from 'path'
  * and saves the output to a file for subsequent steps.
  *
  * Environment variables (inputs):
- * - GH_TOKEN       (optional): GitHub token for zizmor online mode (permissions: `contents: read`)
- * - ZIZMOR_CONFIG  (optional): Path to zizmor configuration file
- * - REPO_OPTIONS   (optional): Additional command-line options to pass to zizmor,
- *                              e.g., "--persona=pedantic"
+ * - GH_TOKEN           (optional): GitHub token for zizmor online mode (permissions: `contents: read`)
+ * - ZIZMOR_CONFIG      (optional): Path to zizmor configuration file
+ * - REPO_OPTIONS       (optional): Additional command-line options to pass to zizmor,
+ *                                  e.g., "--persona=pedantic"
  *
  * Outputs (core.setOutput):
  * - zizmor_exit_code   : Exit code from zizmor (0: success, 11-14: findings detected),
  *                        https://docs.zizmor.sh/usage/#exit-codes
- * - zizmor_output_file : Path to the file containing the combined stdout and stderr output
+ * - zizmor_sarif_file  : Path to the SARIF file
  */
 async function run() {
   try {
@@ -24,35 +24,37 @@ async function run() {
       ...process.env,
       GH_TOKEN: process.env.GH_TOKEN || '',
       ZIZMOR_CONFIG: process.env.ZIZMOR_CONFIG || '',
+      REPO_OPTIONS: (process.env.REPO_OPTIONS || '').trim(),
     }
-
-    const options = (process.env.REPO_OPTIONS || '').trim()
-    const args = options ? options.split(/\s+/).filter((s) => s.length > 0) : []
-    args.push('.')
-
-    console.info(`🚀 Running: zizmor ${args.join(' ')}`)
-
-    let stdout = ''
-    let stderr = ''
 
     const targetRepoPath = path.join(
       process.env.GITHUB_WORKSPACE || '',
       'security-analysis-target-repo'
     )
+
+    let args = env.REPO_OPTIONS ? env.REPO_OPTIONS.split(/\s+/).filter((s) => s.length > 0) : []
+    args = args.filter((arg) => !arg.startsWith('--format'))
+    args.push('--format=sarif')
+    args.push('.')
+
+    console.info(`🚀 Running: zizmor ${args.join(' ')}`)
+
+    let stdout = ''
+    // let stderr = ''
+
     const exitCode = await exec.exec('zizmor', args, {
       cwd: targetRepoPath,
-      stdio: 'inherit',
+      stdio: 'pipe',
       env: env,
       ignoreReturnCode: true,
       listeners: {
         stdout: (data: Buffer) => {
           const chunk = data.toString()
           stdout += chunk
-          process.stdout.write(chunk)
         },
         stderr: (data: Buffer) => {
           const chunk = data.toString()
-          stderr += chunk
+          // stderr += chunk
           process.stderr.write(chunk)
         },
       },
@@ -64,15 +66,40 @@ async function run() {
       return
     }
 
-    const outputFile = 'zizmor-output.txt'
-    fs.writeFileSync(outputFile, stdout + stderr)
+    let sarifJson: string
+    try {
+      sarifJson = extractSarifJson(stdout)
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error)
+      core.warning(`⚠️ Failed to extract SARIF JSON: ${message}`)
+      core.setFailed(`❌ zizmor output did not contain valid SARIF JSON. Raw output: ${stdout}`)
+      return
+    }
+
+    const sarifFilePath = 'zizmor-sarif-output.json'
+    const fullSarifPath = path.join(targetRepoPath, sarifFilePath)
+    fs.writeFileSync(fullSarifPath, sarifJson, 'utf8')
+    core.setOutput('zizmor_sarif_file', fullSarifPath)
+    core.info(`✅ SARIF file saved: ${fullSarifPath}`)
 
     core.setOutput('zizmor_exit_code', exitCode.toString())
-    core.setOutput('zizmor_output_file', outputFile)
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)
     core.setFailed(`❌ zizmor scan failed: ${message}`)
   }
+}
+
+/**
+ * Extracts the SARIF JSON object from a mixed stdout output containing logs
+ */
+function extractSarifJson(output: string): string {
+  // Find the first '{' and last '}' to extract the JSON portion
+  const start = output.indexOf('{')
+  const end = output.lastIndexOf('}')
+  if (start === -1 || end === -1 || end <= start) {
+    throw new Error('No valid JSON object found in zizmor output')
+  }
+  return output.substring(start, end + 1)
 }
 
 run()

@@ -1,0 +1,5 @@
+#!/bin/sh
+
+npm ci
+npm run lint:check
+npm run format:check
