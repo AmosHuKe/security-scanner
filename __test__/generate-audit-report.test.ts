@@ -2,8 +2,6 @@ import { jest, describe, it, expect, beforeEach } from '@jest/globals'
 import {
   generateMarkdownFromSarif,
   generateMarkdownFromSarifFile,
-  SEVERITY_ORDER,
-  SEVERITY_ICON,
 } from '../scripts/generate-audit-report'
 import * as fs from 'fs'
 import type { SarifLog, Result, ReportingDescriptor } from '@microsoft/sarif'
@@ -76,13 +74,13 @@ describe('SARIF to Markdown report generator', () => {
   })
 
   describe('generateMarkdownFromSarifFile', () => {
-    it('should read file and call generateMarkdownFromSarif', () => {
+    it('should read file and return empty string when no results', () => {
       const mockSarif: SarifLog = createMockSarifLog([])
       mockedFs.readFileSync.mockReturnValue(JSON.stringify(mockSarif))
 
       const result = generateMarkdownFromSarifFile('dummy.sarif')
       expect(mockedFs.readFileSync).toHaveBeenCalledWith('dummy.sarif', 'utf8')
-      expect(result).not.toContain('# 🔍 Security Audit Report')
+      expect(result).toBe('')
     })
 
     it('should throw an error when file does not exist', () => {
@@ -94,18 +92,13 @@ describe('SARIF to Markdown report generator', () => {
   })
 
   describe('generateMarkdownFromSarif', () => {
-    it('should generate correct header and overview for empty results', () => {
+    it('should return empty string for empty results', () => {
       const sarif = createMockSarifLog([])
       const markdown = generateMarkdownFromSarif(sarif)
-
-      expect(markdown).not.toContain('## 📊 Overview')
-      expect(markdown).not.toContain('| Severity | Count | Confidence Distribution |')
-      SEVERITY_ORDER.forEach((sev) => {
-        expect(markdown).not.toContain(`| ${SEVERITY_ICON[sev]} ${sev} |`)
-      })
+      expect(markdown).toBe('')
     })
 
-    it('should correctly group by severity and show confidence distribution', () => {
+    it('should correctly group by severity and show counts', () => {
       const results = [
         createMockResult({
           properties: { 'zizmor/severity': 'High', 'zizmor/confidence': 'High' },
@@ -118,9 +111,10 @@ describe('SARIF to Markdown report generator', () => {
       const sarif = createMockSarifLog(results)
       const markdown = generateMarkdownFromSarif(sarif)
 
-      expect(markdown).toContain('| 🔴 High | 2 | High:1 / Medium:1 |')
-      expect(markdown).toContain('| 🟢 Low | 1 | Low:1 |')
+      expect(markdown).toContain('| 🔴 High | 2 |')
+      expect(markdown).toContain('| 🟢 Low | 1 |')
       expect(markdown).not.toContain('| ℹ️ Informational')
+      expect(markdown).toContain('Total issues: 3')
     })
 
     it('should group by file and display issue details under each file', () => {
@@ -150,10 +144,9 @@ describe('SARIF to Markdown report generator', () => {
       const markdown = generateMarkdownFromSarif(sarif)
 
       expect(markdown).toContain('## 📁 Details')
-      expect(markdown).toContain('### 📄 `file1.yml`')
-      expect(markdown).toContain('### 📄 `file2.yml`')
-      expect(markdown).toContain('#### 🔴 #1 `rule-001`')
-      expect(markdown).not.toContain('#### 🔴 #2 `rule-001`')
+      expect(markdown).toContain('<summary>📄 file1.yml - 🔴High(1)</summary>')
+      expect(markdown).toContain('<summary>📄 file2.yml - 🔴High(1)</summary>')
+      expect(markdown).toContain('| 🔴 High | rule-001 | High |')
     })
 
     it('should correctly display the attribute table for each issue', () => {
@@ -170,7 +163,7 @@ describe('SARIF to Markdown report generator', () => {
       const sarif = createMockSarifLog([result])
       const markdown = generateMarkdownFromSarif(sarif)
 
-      expect(markdown).toContain('| 🔴 High | High |')
+      expect(markdown).toContain('| 🔴 High | secret-detected | High |')
     })
 
     it('should show documentation link when rule has helpUri', () => {
@@ -179,7 +172,7 @@ describe('SARIF to Markdown report generator', () => {
       const sarif = createMockSarifLog([result], [rule])
       const markdown = generateMarkdownFromSarif(sarif)
 
-      expect(markdown).toContain('📖 [View Documentation](https://docs.example.com/custom)')
+      expect(markdown).toContain('**Documentation**: [view](https://docs.example.com/custom)')
     })
 
     it('should generate collapsible full path when codeFlows exist', () => {
@@ -221,7 +214,7 @@ describe('SARIF to Markdown report generator', () => {
       expect(markdown).toContain('</details>')
     })
 
-    it('should display code snippet', () => {
+    it('should display code snippet without line numbers', () => {
       const result = createMockResult({
         locations: [
           {
@@ -236,7 +229,7 @@ describe('SARIF to Markdown report generator', () => {
       const markdown = generateMarkdownFromSarif(sarif)
 
       expect(markdown).toContain('```yaml')
-      expect(markdown).toContain('5 |   - name: insecure')
+      expect(markdown).toContain('  - name: insecure')
       expect(markdown).toContain('```')
     })
 
@@ -249,14 +242,14 @@ describe('SARIF to Markdown report generator', () => {
       const sarif = createMockSarifLog([result])
       const markdown = generateMarkdownFromSarif(sarif)
 
-      expect(markdown).toContain('| ℹ️ Informational | Unknown |')
+      expect(markdown).toContain('| ℹ️ Informational | rule-001 | Unknown |')
     })
 
     it('should handle missing codeFlows or locations gracefully', () => {
       const result = createMockResult({ codeFlows: undefined })
       const sarif = createMockSarifLog([result])
       const markdown = generateMarkdownFromSarif(sarif)
-      expect(markdown).not.toContain('<details>')
+      expect(markdown).not.toContain('<summary>🔍 Full Path</summary>')
     })
   })
 })
