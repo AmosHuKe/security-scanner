@@ -60,11 +60,11 @@ async function run() {
         core.info(`✅ Generated Markdown report from SARIF file: ${sarifFile}`)
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error)
-        core.warning(`⚠️ Failed to generate report from SARIF: ${message}`)
-        issueBody = 'No output captured.'
+        core.info(`⚠️ Failed to generate report from SARIF: ${message}`)
+        issueBody = ''
       }
     } else {
-      issueBody = 'No output captured.'
+      issueBody = ''
     }
 
     // If body is empty (no issues found)

@@ -1,6 +1,7 @@
 import * as exec from '@actions/exec'
 import * as core from '@actions/core'
 import * as fs from 'fs'
+import * as sarif from '@microsoft/sarif'
 import path from 'path'
 
 /**
@@ -68,7 +69,17 @@ async function run() {
 
     let sarifJson: string
     try {
-      sarifJson = extractSarifJson(stdout)
+      const emptySarif: sarif.SarifLog = {
+        version: '2.1.0',
+        runs: [
+          {
+            tool: { driver: { name: '' } },
+            results: [],
+          },
+        ],
+      }
+      const emptySarifJson: string = JSON.stringify(emptySarif, null, 2)
+      sarifJson = exitCode != 3 ? extractSarifJson(stdout) : emptySarifJson
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error)
       core.warning(`⚠️ Failed to extract SARIF JSON: ${message}`)
