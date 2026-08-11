@@ -37,7 +37,8 @@ export function generateMarkdownFromSarifFile(
 export function generateMarkdownFromSarif(
   repoBase: string,
   commitSha: string,
-  sarifLog: sarif.SarifLog
+  sarifLog: sarif.SarifLog,
+  maxResults: number = 50
 ): string {
   const run = sarifLog.runs[0]
   const results = run.results || []
@@ -47,9 +48,15 @@ export function generateMarkdownFromSarif(
     return ''
   }
 
-  const rulesMap = new Map<string, sarif.ReportingDescriptor>()
+  const sortedResults = results.slice().sort((a, b) => {
+    const severityA = getProperty(a, 'zizmor/severity', 'Informational')
+    const severityB = getProperty(b, 'zizmor/severity', 'Informational')
+    return SEVERITY_ORDER.indexOf(severityA) - SEVERITY_ORDER.indexOf(severityB)
+  })
+  const truncatedResults = sortedResults.slice(0, maxResults)
 
   // Build rule index
+  const rulesMap = new Map<string, sarif.ReportingDescriptor>()
   for (const rule of run.tool?.driver?.rules || []) {
     if (rule.id) {
       rulesMap.set(rule.id, rule)
@@ -58,7 +65,7 @@ export function generateMarkdownFromSarif(
 
   // Group by severity
   const groupedBySeverity = new Map<string, sarif.Result[]>()
-  for (const result of results) {
+  for (const result of truncatedResults) {
     const severity = getProperty(result, 'zizmor/severity', 'Informational')
     if (!groupedBySeverity.has(severity)) {
       groupedBySeverity.set(severity, [])
@@ -68,7 +75,7 @@ export function generateMarkdownFromSarif(
 
   // Group by file
   const groupedByFile = new Map<string, sarif.Result[]>()
-  for (const result of results) {
+  for (const result of truncatedResults) {
     const uri = getResultUri(result)
     if (!groupedByFile.has(uri)) {
       groupedByFile.set(uri, [])
