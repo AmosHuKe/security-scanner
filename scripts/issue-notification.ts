@@ -22,8 +22,8 @@ async function run() {
       throw new Error('❌ GH_TOKEN is not set')
     }
 
-    // const exitCodeStr = process.env.ZIZMOR_EXIT_CODE
-    // const exitCode = parseInt(exitCodeStr || '0', 10)
+    const exitCodeString = process.env.ZIZMOR_EXIT_CODE
+    const exitCode = parseInt(exitCodeString || '0', 10)
     const sarifFile = process.env.ZIZMOR_SARIF_FILE || 'zizmor-sarif-output.json'
 
     const repoName = process.env.REPO_NAME
@@ -55,9 +55,15 @@ async function run() {
 
     if (sarifFile && fs.existsSync(sarifFile)) {
       try {
-        const markdown = generateMarkdownFromSarifFile(repoName, repoCommitSha, sarifFile)
-        issueBody = markdown
-        core.info(`✅ Generated Markdown report from SARIF file: ${sarifFile}`)
+        switch (exitCode) {
+          case 1:
+            issueBody = `\`\`\`bash\n${fs.readFileSync(sarifFile, 'utf8')}\n\`\`\``
+            break
+          default:
+            issueBody = generateMarkdownFromSarifFile(repoName, repoCommitSha, sarifFile)
+            core.info(`✅ Generated Markdown report from SARIF file: ${sarifFile}`)
+            break
+        }
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error)
         core.info(`⚠️ Failed to generate report from SARIF: ${message}`)

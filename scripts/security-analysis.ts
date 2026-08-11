@@ -41,7 +41,7 @@ async function run() {
     console.info(`🚀 Running: zizmor ${args.join(' ')}`)
 
     let stdout = ''
-    // let stderr = ''
+    let stderr = ''
 
     const exitCode = await exec.exec('zizmor', args, {
       cwd: targetRepoPath,
@@ -55,13 +55,13 @@ async function run() {
         },
         stderr: (data: Buffer) => {
           const chunk = data.toString()
-          // stderr += chunk
-          process.stderr.write(chunk)
+          stderr += chunk
+          // process.stderr.write(chunk)
         },
       },
     })
 
-    const ZIZMOR_ERROR_CODES = new Set([1, 2])
+    const ZIZMOR_ERROR_CODES = new Set([2])
     if (ZIZMOR_ERROR_CODES.has(exitCode)) {
       core.setFailed(`❌ zizmor tool error (exit code ${exitCode}), please check the output log.`)
       return
@@ -79,7 +79,17 @@ async function run() {
         ],
       }
       const emptySarifJson: string = JSON.stringify(emptySarif, null, 2)
-      sarifJson = exitCode != 3 ? extractSarifJson(stdout) : emptySarifJson
+      switch (exitCode) {
+        case 1:
+          sarifJson = stderr
+          break
+        case 3:
+          sarifJson = emptySarifJson
+          break
+        default:
+          sarifJson = extractSarifJson(stdout)
+          break
+      }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error)
       core.warning(`⚠️ Failed to extract SARIF JSON: ${message}`)
