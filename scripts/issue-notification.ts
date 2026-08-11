@@ -10,6 +10,7 @@ import { generateMarkdownFromSarifFile } from './generate-audit-report'
  * Environment variables (inputs):
  * - GH_TOKEN           (required): GitHub token (permissions: `issues: write`)
  * - REPO_NAME          (required): Full repository name (e.g., "owner/repo")
+ * - REPO_COMMIT_SHA    (required): Commit SHA of the target repository (e.g., "b904b1c321c6fe714e10a1423265d06276cc0e47")
  * - ZIZMOR_EXIT_CODE   (optional): Exit code from zizmor (0: success, 11-14: findings detected)
  * - ZIZMOR_SARIF_FILE  (optional): SARIF file path (default: "zizmor-sarif-output.json")
  */
@@ -28,12 +29,16 @@ async function run() {
     if (!repoName) {
       throw new Error('❌ REPO_NAME environment variable is not set')
     }
+    const repoCommitSha = process.env.REPO_COMMIT_SHA
+    if (!repoCommitSha) {
+      throw new Error('❌ REPO_COMMIT_SHA environment variable is not set')
+    }
 
     let issueBody: string
 
     if (sarifFile && fs.existsSync(sarifFile)) {
       try {
-        const markdown = generateMarkdownFromSarifFile(sarifFile)
+        const markdown = generateMarkdownFromSarifFile(repoName, repoCommitSha, sarifFile)
         issueBody = markdown
         core.info(`✅ Generated Markdown report from SARIF file: ${sarifFile}`)
       } catch (error: unknown) {

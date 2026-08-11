@@ -10,6 +10,9 @@ jest.mock('fs')
 const mockedFs = jest.mocked(fs)
 
 describe('SARIF to Markdown report generator', () => {
+  const repoBase = 'owner/repo'
+  const commitSha = 'abc123'
+
   // Mock base SARIF data
   const createMockResult = (overrides: Partial<Result> = {}): Result => ({
     ruleId: 'zizmor/rule-001',
@@ -39,6 +42,7 @@ describe('SARIF to Markdown report generator', () => {
                     artifactLocation: { uri: 'src/main.yml' },
                     region: { startLine: 1 },
                   },
+                  message: { text: 'Flow location message' },
                 },
               },
             ],
@@ -78,8 +82,8 @@ describe('SARIF to Markdown report generator', () => {
       const mockSarif: SarifLog = createMockSarifLog([])
       mockedFs.readFileSync.mockReturnValue(JSON.stringify(mockSarif))
 
-      const result = generateMarkdownFromSarifFile('dummy.sarif')
-      expect(mockedFs.readFileSync).toHaveBeenCalledWith('dummy.sarif', 'utf8')
+      const result = generateMarkdownFromSarifFile(repoBase, commitSha, 'sarif.json')
+      expect(mockedFs.readFileSync).toHaveBeenCalledWith('sarif.json', 'utf8')
       expect(result).toBe('')
     })
 
@@ -87,14 +91,16 @@ describe('SARIF to Markdown report generator', () => {
       mockedFs.readFileSync.mockImplementation(() => {
         throw new Error('ENOENT')
       })
-      expect(() => generateMarkdownFromSarifFile('missing.sarif')).toThrow('ENOENT')
+      expect(() =>
+        generateMarkdownFromSarifFile(repoBase, commitSha, 'missing-sarif.json')
+      ).toThrow('ENOENT')
     })
   })
 
   describe('generateMarkdownFromSarif', () => {
     it('should return empty string for empty results', () => {
       const sarif = createMockSarifLog([])
-      const markdown = generateMarkdownFromSarif(sarif)
+      const markdown = generateMarkdownFromSarif(repoBase, commitSha, sarif)
       expect(markdown).toBe('')
     })
 
@@ -109,12 +115,11 @@ describe('SARIF to Markdown report generator', () => {
         createMockResult({ properties: { 'zizmor/severity': 'Low', 'zizmor/confidence': 'Low' } }),
       ]
       const sarif = createMockSarifLog(results)
-      const markdown = generateMarkdownFromSarif(sarif)
+      const markdown = generateMarkdownFromSarif(repoBase, commitSha, sarif)
 
       expect(markdown).toContain('| 🔴 High | 2 |')
       expect(markdown).toContain('| 🟢 Low | 1 |')
       expect(markdown).not.toContain('| ℹ️ Informational')
-      expect(markdown).toContain('Total issues: 3')
     })
 
     it('should group by file and display issue details under each file', () => {
@@ -141,12 +146,14 @@ describe('SARIF to Markdown report generator', () => {
         }),
       ]
       const sarif = createMockSarifLog(results)
-      const markdown = generateMarkdownFromSarif(sarif)
+      const markdown = generateMarkdownFromSarif(repoBase, commitSha, sarif)
 
       expect(markdown).toContain('## 📁 Details')
       expect(markdown).toContain('<summary>📄 file1.yml - 🔴High(1)</summary>')
       expect(markdown).toContain('<summary>📄 file2.yml - 🔴High(1)</summary>')
-      expect(markdown).toContain('| 🔴 High | rule-001 | High |')
+      expect(markdown).toContain('<td align="center">🔴 High</td>')
+      expect(markdown).toContain('<td align="center">rule-001</td>')
+      expect(markdown).toContain('<td align="center">High</td>')
     })
 
     it('should correctly display the attribute table for each issue', () => {
@@ -161,21 +168,25 @@ describe('SARIF to Markdown report generator', () => {
         },
       })
       const sarif = createMockSarifLog([result])
-      const markdown = generateMarkdownFromSarif(sarif)
+      const markdown = generateMarkdownFromSarif(repoBase, commitSha, sarif)
 
-      expect(markdown).toContain('| 🔴 High | secret-detected | High |')
+      expect(markdown).toContain('<td align="center">🔴 High</td>')
+      expect(markdown).toContain('<td align="center">secret-detected</td>')
+      expect(markdown).toContain('<td align="center">High</td>')
     })
 
-    it('should show documentation link when rule has helpUri', () => {
+    it('should show remediation link when rule has helpUri', () => {
       const rule = createMockRule('zizmor/custom-rule', 'https://docs.example.com/custom')
       const result = createMockResult({ ruleId: 'zizmor/custom-rule' })
       const sarif = createMockSarifLog([result], [rule])
-      const markdown = generateMarkdownFromSarif(sarif)
+      const markdown = generateMarkdownFromSarif(repoBase, commitSha, sarif)
 
-      expect(markdown).toContain('**Documentation**: [view](https://docs.example.com/custom)')
+      expect(markdown).toContain(
+        'Remediation</strong>: <a href="https://docs.example.com/custom">view audit</a>'
+      )
     })
 
-    it('should generate collapsible full path when codeFlows exist', () => {
+    it('should display code flow locations when codeFlows exist', () => {
       const result = createMockResult({
         codeFlows: [
           {
@@ -188,6 +199,7 @@ describe('SARIF to Markdown report generator', () => {
                         artifactLocation: { uri: 'a.yml' },
                         region: { startLine: 1 },
                       },
+                      message: { text: 'First location' },
                     },
                   },
                   {
@@ -196,6 +208,7 @@ describe('SARIF to Markdown report generator', () => {
                         artifactLocation: { uri: 'b.yml' },
                         region: { startLine: 2 },
                       },
+                      message: { text: 'Second location' },
                     },
                   },
                 ],
@@ -205,16 +218,19 @@ describe('SARIF to Markdown report generator', () => {
         ],
       })
       const sarif = createMockSarifLog([result])
-      const markdown = generateMarkdownFromSarif(sarif)
+      const markdown = generateMarkdownFromSarif(repoBase, commitSha, sarif)
 
-      expect(markdown).toContain('<details>')
-      expect(markdown).toContain('<summary>🔍 Full Path</summary>')
-      expect(markdown).toContain('- `a.yml:L1`')
-      expect(markdown).toContain('- `b.yml:L2`')
-      expect(markdown).toContain('</details>')
+      expect(markdown).toContain(
+        `[a.yml#L1](https://github.com/${repoBase}/blob/${commitSha}/a.yml#L1)`
+      )
+      expect(markdown).toContain('**Audit**: First location')
+      expect(markdown).toContain(
+        `[b.yml#L2](https://github.com/${repoBase}/blob/${commitSha}/b.yml#L2)`
+      )
+      expect(markdown).toContain('**Audit**: Second location')
     })
 
-    it('should display code snippet without line numbers', () => {
+    it('should not display code snippet when no code flow message', () => {
       const result = createMockResult({
         locations: [
           {
@@ -224,13 +240,12 @@ describe('SARIF to Markdown report generator', () => {
             },
           },
         ],
+        codeFlows: [],
       })
       const sarif = createMockSarifLog([result])
-      const markdown = generateMarkdownFromSarif(sarif)
+      const markdown = generateMarkdownFromSarif(repoBase, commitSha, sarif)
 
-      expect(markdown).toContain('```yaml')
-      expect(markdown).toContain('  - name: insecure')
-      expect(markdown).toContain('```')
+      expect(markdown).not.toContain('```yaml')
     })
 
     it('should handle missing properties (use default values)', () => {
@@ -240,16 +255,19 @@ describe('SARIF to Markdown report generator', () => {
         locations: [],
       })
       const sarif = createMockSarifLog([result])
-      const markdown = generateMarkdownFromSarif(sarif)
+      const markdown = generateMarkdownFromSarif(repoBase, commitSha, sarif)
 
-      expect(markdown).toContain('| ℹ️ Informational | rule-001 | Unknown |')
+      expect(markdown).toContain('<td align="center">ℹ️ Informational</td>')
+      expect(markdown).toContain('<td align="center">rule-001</td>')
+      expect(markdown).toContain('<td align="center">Unknown</td>')
     })
 
-    it('should handle missing codeFlows or locations gracefully', () => {
+    it('should handle missing codeFlows without falling back', () => {
       const result = createMockResult({ codeFlows: undefined })
       const sarif = createMockSarifLog([result])
-      const markdown = generateMarkdownFromSarif(sarif)
-      expect(markdown).not.toContain('<summary>🔍 Full Path</summary>')
+      const markdown = generateMarkdownFromSarif(repoBase, commitSha, sarif)
+
+      expect(markdown).toContain('<td align="center">🔴 High</td>')
     })
   })
 })

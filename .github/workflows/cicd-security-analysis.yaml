@@ -109,6 +109,7 @@ jobs:
           path: ${{ env.WORK_DIRECTORY }}
 
       - name: "Checkout :: ${{ matrix.repo.name }}"
+        id: checkout_target
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
         with:
           persist-credentials: false
@@ -156,5 +157,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO_NAME: ${{ matrix.repo.name }}
+          REPO_COMMIT_SHA: ${{ steps.checkout_target.outputs.commit }}
           ZIZMOR_EXIT_CODE: ${{ steps.security-analysis.outputs.zizmor_exit_code }}
           ZIZMOR_SARIF_FILE: ${{ steps.security-analysis.outputs.zizmor_sarif_file }}

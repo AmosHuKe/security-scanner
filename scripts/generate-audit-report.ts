@@ -21,16 +21,24 @@ export const SEVERITY_ORDER = ['High', 'Medium', 'Low', 'Informational']
 /**
  * Generates a Markdown report from a SARIF file path
  */
-export function generateMarkdownFromSarifFile(sarifFilePath: string): string {
+export function generateMarkdownFromSarifFile(
+  repoBase: string,
+  commitSha: string,
+  sarifFilePath: string
+): string {
   const content = fs.readFileSync(sarifFilePath, 'utf8')
   const sarifLog = JSON.parse(content) as sarif.SarifLog
-  return generateMarkdownFromSarif(sarifLog)
+  return generateMarkdownFromSarif(repoBase, commitSha, sarifLog)
 }
 
 /**
  * Generates a Markdown audit report from a SarifLog object
  */
-export function generateMarkdownFromSarif(sarifLog: sarif.SarifLog): string {
+export function generateMarkdownFromSarif(
+  repoBase: string,
+  commitSha: string,
+  sarifLog: sarif.SarifLog
+): string {
   const run = sarifLog.runs[0]
   const results = run.results || []
 
@@ -92,14 +100,19 @@ export function generateMarkdownFromSarif(sarifLog: sarif.SarifLog): string {
     lines.push(`| ${SEVERITY_ICON[severity] || ''} ${severity} | ${items.length} |`)
   }
   lines.push('')
-  lines.push(`Total issues: ${results.length}`)
-  lines.push('')
+  // lines.push(`Total issues: ${results.length}`)
+  // lines.push('')
 
   // Per-file details
   lines.push('## 📁 Details')
   lines.push('')
 
   for (const [uri, items] of groupedByFile) {
+    items.sort((a, b) => {
+      const sevA = getProperty(a, 'zizmor/severity', 'Informational')
+      const sevB = getProperty(b, 'zizmor/severity', 'Informational')
+      return SEVERITY_ORDER.indexOf(sevA) - SEVERITY_ORDER.indexOf(sevB)
+    })
     const severityCounts = new Map<string, number>()
     for (const item of items) {
       const severity = getProperty(item, 'zizmor/severity', 'Informational')
@@ -120,56 +133,80 @@ export function generateMarkdownFromSarif(sarifLog: sarif.SarifLog): string {
       const confidence = getProperty(result, 'zizmor/confidence', 'Unknown')
       const shortRuleId = getShortRuleId(result.ruleId || 'unknown')
       const msg = result.message?.text || 'No message'
-      const uriShort = getResultUri(result)
-      const line = getResultLine(result)
-      const snippet = getSnippet(result)
+      // const uriShort = getResultUri(result)
+      // const line = getResultLine(result)
+      // const snippet = getSnippet(result)
       const ruleInfo = rulesMap.get(result.ruleId || '')
 
       lines.push('')
-      lines.push('| Severity | Audit Rule | Confidence |')
-      lines.push('|:---|:---|:---|')
-      lines.push(
-        `| ${SEVERITY_ICON[severity] || ''} ${severity} | ${shortRuleId} | ${confidence} |`
-      )
-      lines.push('')
-      lines.push(`**Location**: \`${uriShort}:L${line}\``)
-      lines.push(`**Message**: ${msg}`)
-      if (ruleInfo?.helpUri) {
-        lines.push(`**Documentation**: [view](${ruleInfo.helpUri})`)
-      }
-      lines.push('')
+      lines.push('<table><tbody>')
 
-      if (snippet) {
-        lines.push('```yaml')
-        lines.push(`${snippet}`)
-        lines.push('```')
-        lines.push('')
+      lines.push('<tr>')
+      lines.push(`<td align="center" rowspan="2"><strong>${idx + 1}</strong></td>`)
+      lines.push(`<td align="center"><strong>Severity</strong></td>`)
+      lines.push(`<td align="center"><strong>Audit Rule</strong></td>`)
+      lines.push(`<td align="center"><strong>Confidence</strong></td>`)
+      lines.push('</tr>')
+
+      lines.push('<tr>')
+      lines.push(`<td align="center">${SEVERITY_ICON[severity] || ''} ${severity}</td>`)
+      lines.push(`<td align="center">${shortRuleId}</td>`)
+      lines.push(`<td align="center">${confidence}</td>`)
+      lines.push('</tr>')
+
+      lines.push('<tr>')
+      lines.push(`<td colspan="4">`)
+      lines.push(`<strong>Audit</strong>: ${msg}`)
+      if (ruleInfo?.helpUri) {
+        lines.push(
+          `<br/><strong>Remediation</strong>: <a href="${ruleInfo.helpUri}">view audit</a>`
+        )
       }
+      lines.push(`</td>`)
+      lines.push('</tr>')
+
+      lines.push('</tbody></table>')
+      lines.push('')
 
       if (result.codeFlows && result.codeFlows.length > 0) {
-        lines.push('<details>')
-        lines.push('<summary>🔍 Full Path</summary>')
         lines.push('')
-        for (const cf of result.codeFlows) {
-          const codeFlow = cf as SarifCodeFlow
-          for (const tf of codeFlow.threadFlows || []) {
-            for (const loc of tf.locations || []) {
-              const phys = loc.location?.physicalLocation
-              if (phys) {
-                const file = phys.artifactLocation?.uri || '?'
-                const ln = phys.region?.startLine ?? '?'
-                lines.push(`- \`${file}:L${ln}\``)
+        for (const codeFlow of result.codeFlows) {
+          const sarifCodeFlow = codeFlow as SarifCodeFlow
+          for (const threadFlow of sarifCodeFlow.threadFlows || []) {
+            for (const location of threadFlow.locations || []) {
+              const physicalLocation = location.location?.physicalLocation
+              if (physicalLocation) {
+                const file = physicalLocation.artifactLocation?.uri || '?'
+                const snippet = physicalLocation.region?.snippet?.text || ''
+                const startLine = physicalLocation.region?.startLine
+                if (startLine === undefined) continue
+                const endLine = physicalLocation.region?.endLine
+
+                const msg = location.location?.message?.text || ''
+                if (!msg) continue
+                const fileLink = buildGitHubLink(repoBase, commitSha, file, startLine, endLine)
+                const fileLinkText = `[${file}#L${startLine}${endLine && endLine > startLine ? `-L${endLine}` : ''}](${fileLink})`
+
+                lines.push(`- ${fileLinkText}`)
+                lines.push(`  **Audit**: ${msg}`)
+                if (snippet) {
+                  const limitedSnippet = limitSnippetLines(snippet, 6).replace(/^/gm, '  ')
+                  lines.push('  ')
+                  lines.push('  ```yaml')
+                  lines.push(`${limitedSnippet}`)
+                  lines.push('  ```')
+                  lines.push('  ')
+                }
               }
             }
           }
         }
-        lines.push('')
-        lines.push('</details>')
-        lines.push('')
       }
 
-      lines.push('')
       lines.push('---')
+      lines.push('')
+      lines.push('<br/><br/>')
+      lines.push('')
     }
 
     lines.push('')
@@ -177,8 +214,11 @@ export function generateMarkdownFromSarif(sarifLog: sarif.SarifLog): string {
     lines.push('')
   }
 
+  lines.push('<br/>')
   lines.push('')
-  lines.push(`*Report generated at: ${new Date().toLocaleString()}*`)
+  lines.push(
+    `*Report generated at: ${new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })}*`
+  )
 
   return lines.join('\n')
 }
@@ -217,4 +257,27 @@ export function getResultLine(result: sarif.Result): number | string {
  */
 export function getSnippet(result: sarif.Result): string {
   return result.locations?.[0]?.physicalLocation?.region?.snippet?.text || ''
+}
+
+function buildGitHubLink(
+  repoBase: string,
+  commitSha: string,
+  filePath: string,
+  startLine: number,
+  endLine?: number
+): string {
+  let url = `https://github.com/${repoBase}/blob/${commitSha}/${filePath}#L${startLine}`
+  if (endLine && endLine > startLine) {
+    url += `-L${endLine}`
+  }
+  return url
+}
+
+function limitSnippetLines(text: string, maxLines: number = 5): string {
+  if (!text) return text
+  const lines = text.split('\n')
+  if (lines.length <= maxLines) {
+    return text
+  }
+  return lines.slice(0, maxLines).join('\n') + '\n...'
 }
