@@ -60,7 +60,7 @@ async function run() {
       },
     })
 
-    const ZIZMOR_ERROR_CODES = new Set([1, 2, 3])
+    const ZIZMOR_ERROR_CODES = new Set([1, 2])
     if (ZIZMOR_ERROR_CODES.has(exitCode)) {
       core.setFailed(`❌ zizmor tool error (exit code ${exitCode}), please check the output log.`)
       return
