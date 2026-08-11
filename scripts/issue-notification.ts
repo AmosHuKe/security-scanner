@@ -11,6 +11,7 @@ import { generateMarkdownFromSarifFile } from './generate-audit-report'
  * - GH_TOKEN           (required): GitHub token (permissions: `issues: write`)
  * - REPO_NAME          (required): Full repository name (e.g., "owner/repo")
  * - REPO_COMMIT_SHA    (required): Commit SHA of the target repository (e.g., "b904b1c321c6fe714e10a1423265d06276cc0e47")
+ * - NOTIFY_USERS       (optional): JSON array of GitHub usernames to @mention in the issue (e.g., '["user1","user2"]' default: "[]")
  * - ZIZMOR_EXIT_CODE   (optional): Exit code from zizmor (0: success, 11-14: findings detected)
  * - ZIZMOR_SARIF_FILE  (optional): SARIF file path (default: "zizmor-sarif-output.json")
  */
@@ -33,6 +34,22 @@ async function run() {
     if (!repoCommitSha) {
       throw new Error('❌ REPO_COMMIT_SHA environment variable is not set')
     }
+
+    const notifyUsersRaw = process.env.NOTIFY_USERS || '[]'
+    let notifyUsers: string[] = []
+    try {
+      notifyUsers = JSON.parse(notifyUsersRaw)
+      if (!Array.isArray(notifyUsers)) {
+        notifyUsers = []
+      }
+    } catch {
+      notifyUsers = []
+    }
+
+    const mentions =
+      notifyUsers.length > 0
+        ? `🔔 ${notifyUsers.map((user) => `@${user.trim()}`).join(' | ')} \n\n`
+        : ''
 
     let issueBody: string
 
@@ -58,7 +75,14 @@ async function run() {
 
     const issueMarker = `<!-- security-issue-marker: ${repoName} -->`
     const issueTitle = `[CI/CD Security] ${repoName} - Issue Report`
-    const finalIssueBody = `${issueMarker}\n\n${issueBody}`
+    const finalIssueBody =
+      `${issueMarker} \n\n` +
+      `## 📦 ${repoName} \n\n` +
+      `📌 Commit SHA: [${repoCommitSha}](https://github.com/${repoName}/tree/${repoCommitSha}) \n\n` +
+      `${mentions}` +
+      `🕜 Report generated at: ${new Date().toUTCString()}` +
+      `\n\n` +
+      `${issueBody}`
 
     const allIssues = await octokit.paginate(octokit.rest.issues.listForRepo, {
       owner,

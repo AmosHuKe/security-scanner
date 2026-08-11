@@ -6,3 +6,4 @@ repositories:
   - name: fluttercandies/flutter_tilt
     enabled: true
     options: ""
+    notify_users: [AmosHuKe]

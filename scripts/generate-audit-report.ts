@@ -216,9 +216,6 @@ export function generateMarkdownFromSarif(
 
   lines.push('<br/>')
   lines.push('')
-  lines.push(
-    `*Report generated at: ${new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })}*`
-  )
 
   return lines.join('\n')
 }
