@@ -46,11 +46,6 @@ async function run() {
       notifyUsers = []
     }
 
-    const mentions =
-      notifyUsers.length > 0
-        ? `🔔 ${notifyUsers.map((user) => `@${user.trim()}`).join(' | ')} \n\n`
-        : ''
-
     let issueBody: string
 
     if (sarifFile && fs.existsSync(sarifFile)) {
@@ -85,7 +80,6 @@ async function run() {
       `${issueMarker} \n\n` +
       `## 📦 ${repoName} \n\n` +
       `📌 Commit SHA: [${repoCommitSha}](https://github.com/${repoName}/tree/${repoCommitSha}) \n\n` +
-      `${mentions}` +
       `🕜 Report generated at: ${new Date().toUTCString()}` +
       `\n\n` +
       `${issueBody}`
@@ -107,6 +101,7 @@ async function run() {
         await octokit.rest.issues.update({
           owner,
           repo,
+          assignees: notifyUsers,
           issue_number: existingOpenIssue.number,
           title: issueTitle,
           body: finalIssueBody,
@@ -116,6 +111,7 @@ async function run() {
         await octokit.rest.issues.create({
           owner,
           repo,
+          assignees: notifyUsers,
           title: issueTitle,
           body: finalIssueBody,
         })
@@ -127,6 +123,7 @@ async function run() {
         await octokit.rest.issues.update({
           owner,
           repo,
+          assignees: notifyUsers,
           issue_number: existingOpenIssue.number,
           state: 'closed',
         })
