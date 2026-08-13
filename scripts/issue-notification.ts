@@ -80,7 +80,7 @@ async function run() {
       `${issueMarker} \n\n` +
       `## 📦 ${repoName} \n\n` +
       `📌 Commit SHA: [${repoCommitSha}](https://github.com/${repoName}/tree/${repoCommitSha}) \n\n` +
-      `🕜 Report generated at: ${new Date().toUTCString()}` +
+      `🕜 Report generated at: ${new Date().toISOString()}` +
       `\n\n` +
       `${issueBody}`
 
