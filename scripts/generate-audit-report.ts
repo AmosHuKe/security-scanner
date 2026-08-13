@@ -38,7 +38,7 @@ export function generateMarkdownFromSarif(
   repoBase: string,
   commitSha: string,
   sarifLog: sarif.SarifLog,
-  maxResults: number = 50
+  maxResults: number = 40
 ): string {
   const run = sarifLog.runs[0]
   const results = run.results || []
