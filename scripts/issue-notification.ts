@@ -11,7 +11,7 @@ import { generateMarkdownFromSarifFile } from './generate-audit-report'
  * - GH_TOKEN           (required): GitHub token (permissions: `issues: write`)
  * - REPO_NAME          (required): Full repository name (e.g., "owner/repo")
  * - REPO_COMMIT_SHA    (required): Commit SHA of the target repository (e.g., "b904b1c321c6fe714e10a1423265d06276cc0e47")
- * - NOTIFY_USERS       (optional): JSON array of GitHub usernames to @mention in the issue (e.g., '["user1","user2"]' default: "[]")
+ * - ASSIGNESS          (optional): JSON array of GitHub usernames to assign as the issue's assignees (e.g., '["user1","user2"]' default: "[]")
  * - ZIZMOR_EXIT_CODE   (optional): Exit code from zizmor (0: success, 11-14: findings detected)
  * - ZIZMOR_SARIF_FILE  (optional): SARIF file path (default: "zizmor-sarif-output.json")
  */
@@ -35,15 +35,15 @@ async function run() {
       throw new Error('❌ REPO_COMMIT_SHA environment variable is not set')
     }
 
-    const notifyUsersRaw = process.env.NOTIFY_USERS || '[]'
-    let notifyUsers: string[] = []
+    const assigneesRaw = process.env.ASSIGNESS || '[]'
+    let assignees: string[] = []
     try {
-      notifyUsers = JSON.parse(notifyUsersRaw)
-      if (!Array.isArray(notifyUsers)) {
-        notifyUsers = []
+      assignees = JSON.parse(assigneesRaw)
+      if (!Array.isArray(assignees)) {
+        assignees = []
       }
     } catch {
-      notifyUsers = []
+      assignees = []
     }
 
     let issueBody: string
@@ -101,7 +101,7 @@ async function run() {
         await octokit.rest.issues.update({
           owner,
           repo,
-          assignees: notifyUsers,
+          assignees: assignees,
           issue_number: existingOpenIssue.number,
           title: issueTitle,
           body: finalIssueBody,
@@ -111,7 +111,7 @@ async function run() {
         await octokit.rest.issues.create({
           owner,
           repo,
-          assignees: notifyUsers,
+          assignees: assignees,
           title: issueTitle,
           body: finalIssueBody,
         })
@@ -123,7 +123,7 @@ async function run() {
         await octokit.rest.issues.update({
           owner,
           repo,
-          assignees: notifyUsers,
+          assignees: assignees,
           issue_number: existingOpenIssue.number,
           state: 'closed',
         })

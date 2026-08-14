@@ -7,7 +7,7 @@ const RepoSchema = z.object({
   name: z.string().min(1), // Repository full name (e.g., "owner/repo")
   enabled: z.boolean().optional(), // Whether this repo should be scanned (defaults to true)
   options: z.string().optional(), // Custom command-line options for this repo
-  notify_users: z.array(z.string()).optional().default([]), // List of GitHub usernames to @mention in the issue report
+  assignees: z.array(z.string()).optional().default([]), // JSON array of GitHub usernames to assign as the issue's assignees (e.g., '["user1","user2"]' default: "[]")
 })
 
 const ConfigSchema = z.object({
@@ -52,7 +52,7 @@ async function run() {
         return {
           name: repo.name,
           options: finalOptions,
-          notify_users: repo.notify_users || [],
+          assignees: repo.assignees || [],
         }
       })
 

@@ -160,6 +160,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO_NAME: ${{ matrix.repo.name }}
           REPO_COMMIT_SHA: ${{ steps.checkout_target.outputs.commit }}
-          NOTIFY_USERS: ${{ toJSON(matrix.repo.notify_users) }}
+          ASSIGNESS: ${{ toJSON(matrix.repo.assignees) }}
           ZIZMOR_EXIT_CODE: ${{ steps.security-analysis.outputs.zizmor_exit_code }}
           ZIZMOR_SARIF_FILE: ${{ steps.security-analysis.outputs.zizmor_sarif_file }}
