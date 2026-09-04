@@ -30,7 +30,7 @@ defaults:
 
 env:
   REPO: "AmosHuKe/security-scanner"
-  ZIZMOR_VERSION: "1.29.0"
+  ZIZMOR_VERSION: "1.30.0"
   NODE_VERSION: "24"
   WORK_DIRECTORY: "./security-analysis-workflow"
 
